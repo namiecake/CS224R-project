@@ -20,8 +20,12 @@ accept externally-calibrated initial distribution parameters (e.g. from HMDA).
 - `sweep_lambda.py` &mdash; sweeps the fairness-penalty weight `lam` over several
   orders of magnitude under one or both fairness reward modes and writes a CSV
   summary (mean/std cumulative profit, gap, reward across seeds, per policy).
+- `hmda_calibrate.py` &mdash; downloads a filtered subset of HMDA loan data from
+  the CFPB Data Browser API (no local file needed) and calibrates the initial
+  population parameters (`mu_*_init`, `sigma_*_init`, `N_*_init`) for
+  `LendingEnv`. Outputs a `hmda_config.json` you can pass directly to the env.
 - `requirements.txt` &mdash; minimal deps (`numpy`, `scipy`, `matplotlib`,
-  `gymnasium`).
+  `gymnasium`, `requests`).
 
 ## How the pieces fit together
 
@@ -71,7 +75,26 @@ tables and cross-seed statistical comparisons.
 
 ```bash
 pip install -r requirements.txt
+
+# --- HMDA calibration (optional but recommended) ---
+# Downloads filtered loan data from the CFPB API (no local file needed) and
+# fits per-group truncated-Normal parameters for White vs. Black/Af. American
+# applicants. Defaults: CA/TX/FL/NY/IL, year 2022, up to 50 000 streamed rows.
+python hmda_calibrate.py --out hmda_config.json
+
+# Larger sample or different states/year:
+python hmda_calibrate.py --states CA TX FL NY GA NC --year 2023 --n-rows 80000
+
+# Nationwide sample (bigger; use a smaller --n-rows to keep it fast):
+python hmda_calibrate.py --nationwide --n-rows 30000
+
+# --- Baselines ---
+# Without calibration (uses synthetic defaults: mu_A=0.60, mu_B=0.40):
 python run_baselines.py --out baseline_comparison.png
+
+# With HMDA-calibrated parameters:
+# (load hmda_config.json and pass to LendingEnv — see "Plugging in calibrated
+# initial parameters" below)
 
 # Sweep lambda (fairness penalty weight) over several orders of magnitude.
 # Baselines do not consume the reward signal, so their actions are
