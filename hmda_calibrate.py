@@ -77,9 +77,12 @@ DEFAULT_STATES = ["CA", "TX", "FL", "NY", "IL"]
 # ---------------------------------------------------------------------------
 
 
+_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; hmda-calibrate/1.0)"}
+
+
 def _stream_rows(url: str, params: dict, n_rows: int, timeout: int) -> Iterator[dict]:
     """Yield up to *n_rows* parsed CSV rows from a streaming CFPB API response."""
-    with requests.get(url, params=params, stream=True, timeout=timeout) as r:
+    with requests.get(url, params=params, headers=_HEADERS, stream=True, timeout=timeout) as r:
         try:
             r.raise_for_status()
         except requests.HTTPError as exc:
@@ -111,12 +114,14 @@ def fetch_rows(
     actions: str,
     timeout: int,
 ) -> list[dict]:
-    """Download up to *n_rows* filtered HMDA rows from the CFPB API."""
+    """Download up to *n_rows* filtered HMDA rows from the CFPB API.
+
+    The API only allows 2 filter criteria (beyond years/states), so we filter
+    server-side on races only and apply loan_purpose/actions_taken client-side.
+    """
     params: dict[str, str] = {
         "years": str(year),
         "races": f"{RACE_A},{RACE_B}",
-        "loan_purposes": loan_purpose,
-        "actions_taken": actions,
     }
 
     if nationwide:
@@ -130,9 +135,23 @@ def fetch_rows(
     print(f"[fetch] GET {url}")
     print(f"        params: {params}")
     print(f"        streaming up to {n_rows:,} rows …")
+    print(f"        client-side filters: loan_purpose={loan_purpose!r}, actions_taken={actions!r}")
 
-    rows = list(_stream_rows(url, params, n_rows, timeout))
-    print(f"[fetch] received {len(rows):,} rows")
+    allowed_purposes = set(loan_purpose.split(","))
+    allowed_actions = set(actions.split(","))
+
+    raw_rows = _stream_rows(url, params, n_rows * 5, timeout)
+    rows: list[dict] = []
+    for row in raw_rows:
+        if row.get("loan_purpose", "").strip() not in allowed_purposes:
+            continue
+        if row.get("action_taken", "").strip() not in allowed_actions:
+            continue
+        rows.append(row)
+        if len(rows) >= n_rows:
+            break
+
+    print(f"[fetch] received {len(rows):,} rows after client-side filtering")
     return rows
 
 

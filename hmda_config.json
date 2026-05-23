@@ -1,0 +1,8 @@
+{
+  "mu_A_init": 0.6622,
+  "sigma_A_init": 0.1294,
+  "N_A_init": 42391,
+  "mu_B_init": 0.5966,
+  "sigma_B_init": 0.1097,
+  "N_B_init": 6001
+}
