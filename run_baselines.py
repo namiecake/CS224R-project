@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from baselines import (
     DemographicParityPolicy,
@@ -31,20 +32,28 @@ def main() -> None:
     parser.add_argument(
         "--hmda-config",
         type=str,
-        default=None,
+        default="hmda_config.json",
         metavar="PATH",
-        help="Path to hmda_config.json produced by hmda_calibrate.py. "
-             "Overrides synthetic default initial distribution parameters.",
+        help="Path to hmda_config.json produced by hmda_calibrate.py.",
     )
     args = parser.parse_args()
 
     env_config: dict = {"horizon": args.n_rounds, "reward_mode": "profit"}
-    if args.hmda_config:
-        with open(args.hmda_config) as f:
+    config_path = Path(args.hmda_config)
+    if config_path.exists():
+        with open(config_path) as f:
             env_config.update(json.load(f))
-        print(f"Loaded HMDA config from '{args.hmda_config}'")
+        print(f"Loaded HMDA config from '{config_path}'")
+    else:
+        print(
+            f"No config at '{config_path}'; using synthetic default group parameters."
+        )
 
     env = LendingEnv(env_config)
+    print(
+        f"LendingEnv: G={env.G}, obs shape={env.observation_space.shape}, "
+        f"action shape={env.action_space.shape}"
+    )
 
     policies = {
         "ProfitMax": ProfitMaxThresholdPolicy(env_config),
@@ -55,11 +64,11 @@ def main() -> None:
     for name, policy in policies.items():
         print(f"Simulating {name}...")
         results[name] = simulate(policy, env, n_seeds=args.n_seeds, n_rounds=args.n_rounds)
-        final_gap = results[name]["gap"][:, -1].mean()
+        final_wvar = results[name]["wvar_mean"][:, -1].mean()
         cum_profit = results[name]["profit"].sum(axis=1).mean()
         print(
             f"  mean cum. profit = {cum_profit:.2f}, "
-            f"mean final |mu_A - mu_B| = {final_gap:.4f}"
+            f"mean final wvar(mean) = {final_wvar:.6f}"
         )
 
     plot_results(results, save_path=args.out, show=False)

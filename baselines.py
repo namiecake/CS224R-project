@@ -1,10 +1,8 @@
 """Non-RL baseline threshold policies and a rollout helper.
 
-Both policies operate on the parametric state ``(mu_g, sigma_g, N_g)`` and
-search a 0.01-resolution grid over per-group thresholds. Expectations are
-computed analytically against the *current* truncated-Normal model implied by
-the state, which matches the env's per-round generative model up to score
-drift within the round.
+Both policies operate on the parametric state ``(mu_g, sigma_g, N_g)`` per
+group. Expectations are computed analytically against the truncated-Normal
+model implied by the state.
 """
 
 from __future__ import annotations
@@ -14,10 +12,8 @@ from typing import Any, Protocol
 import numpy as np
 from scipy.stats import truncnorm
 
-from lending_env import GROUPS, LendingConfig, LendingEnv
-
-
-GRID_STEP: float = 0.01
+from constants import GROUP_ORDER
+from lending_env import LendingConfig, LendingEnv
 
 
 class Policy(Protocol):
@@ -49,12 +45,7 @@ def _group_curves(
     taus: np.ndarray,
     n_integration: int = 2001,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return ``(approval_rate, expected_profit)`` arrays evaluated at ``taus``.
-
-    ``expected_profit`` is the per-group expected profit (already multiplied by
-    ``N``) for each threshold value.
-    """
-
+    """Return ``(approval_rate, expected_profit)`` arrays evaluated at ``taus``."""
     a, b, loc, scale = _truncnorm_args(mu, sigma)
     s = np.linspace(0.0, 1.0, n_integration)
     pdf = truncnorm.pdf(s, a, b, loc=loc, scale=scale)
@@ -63,45 +54,54 @@ def _group_curves(
 
     sf = truncnorm.sf(taus, a, b, loc=loc, scale=scale)
 
-    # Cumulative reward from each grid point onward (right-Riemann via trapezoid).
-    # We integrate from tau to 1: build cumulative trapezoid from the right.
     rev = reward_density[::-1]
     s_rev = s[::-1]
-    # trapezoid cumulative sum from the right
-    diffs = np.diff(s_rev)  # negative
+    diffs = np.diff(s_rev)
     seg = 0.5 * (rev[:-1] + rev[1:]) * diffs
     cum_from_right_rev = np.concatenate(([0.0], np.cumsum(seg)))
-    cum_from_tau = -cum_from_right_rev[::-1]  # since diffs were negative
+    cum_from_tau = -cum_from_right_rev[::-1]
 
     expected_reward_at_grid = np.interp(taus, s, cum_from_tau)
     return sf, N * expected_reward_at_grid
 
 
-def _state_to_group_stats(state: np.ndarray) -> dict[str, tuple[float, float, float]]:
-    return {
-        "A": (float(state[0]), float(state[1]), float(state[2])),
-        "B": (float(state[3]), float(state[4]), float(state[5])),
-    }
+def _state_to_group_stats(
+    state: np.ndarray, G: int
+) -> list[tuple[float, float, float]]:
+    """Parse ``(mu, sigma, N)`` triples from a state vector of length ``3*G``."""
+    stats: list[tuple[float, float, float]] = []
+    for i in range(G):
+        base = 3 * i
+        stats.append(
+            (float(state[base]), float(state[base + 1]), float(state[base + 2]))
+        )
+    return stats
+
+
+def _threshold_for_approval_rate(
+    mu: float, sigma: float, target_rate: float
+) -> float:
+    """Return threshold ``tau`` such that ``P(score >= tau) ≈ target_rate``."""
+    a, b, loc, scale = _truncnorm_args(mu, sigma)
+    # sf(tau) = target_rate  =>  CDF(tau) = 1 - target_rate
+    return float(truncnorm.ppf(1.0 - target_rate, a, b, loc=loc, scale=scale))
 
 
 # ----------------------------------------------------------------- policies
 
 
 class ProfitMaxThresholdPolicy:
-    """Per-round expected-profit-maximising thresholds via grid search.
-
-    Profit decouples across groups, so we optimise each group independently.
-    """
+    """Per-group expected-profit-maximising thresholds via 1D grid search."""
 
     def __init__(self, config: dict[str, Any] | None = None):
         self.cfg = LendingConfig.from_dict(config)
-        self._taus = np.round(np.arange(0.0, 1.0 + GRID_STEP / 2, GRID_STEP), 2)
+        self.G = len(self.cfg.groups)
+        self._taus = np.linspace(0.0, 1.0, 101)
 
     def act(self, state: np.ndarray) -> np.ndarray:
-        stats = _state_to_group_stats(state)
-        tau_out = np.zeros(2, dtype=np.float32)
-        for i, g in enumerate(GROUPS):
-            mu, sigma, N = stats[g]
+        stats = _state_to_group_stats(state, self.G)
+        tau_out = np.zeros(self.G, dtype=np.float32)
+        for i, (mu, sigma, N) in enumerate(stats):
             _, expected_profit = _group_curves(
                 mu,
                 sigma,
@@ -117,84 +117,78 @@ class ProfitMaxThresholdPolicy:
 
 
 class DemographicParityPolicy:
-    """Profit-maximising thresholds subject to (approximate) equal approval rates.
+    """Profit-maximising thresholds subject to equal approval rates across groups.
 
-    For each ``tau_A`` on the grid we pick the ``tau_B`` whose approval rate is
-    closest to ``approval_rate_A(tau_A)``. Among candidate pairs whose absolute
-    approval-rate difference is within ``tolerance`` we take the joint-profit
-    argmax. If no pair clears the tolerance we fall back to the closest pair.
+    Searches over a common target approval rate ``r*`` and picks per-group
+    thresholds that achieve exactly ``r*`` under each group's distribution.
     """
 
-    def __init__(
-        self,
-        config: dict[str, Any] | None = None,
-        tolerance: float = 1e-3,
-    ):
+    def __init__(self, config: dict[str, Any] | None = None):
         self.cfg = LendingConfig.from_dict(config)
-        self.tolerance = float(tolerance)
-        self._taus = np.round(np.arange(0.0, 1.0 + GRID_STEP / 2, GRID_STEP), 2)
+        self.G = len(self.cfg.groups)
+        self._target_rates = np.linspace(0.01, 0.99, 99)
 
     def act(self, state: np.ndarray) -> np.ndarray:
-        stats = _state_to_group_stats(state)
-        mu_A, sigma_A, N_A = stats["A"]
-        mu_B, sigma_B, N_B = stats["B"]
+        stats = _state_to_group_stats(state, self.G)
 
-        sf_A, profit_A = _group_curves(
-            mu_A, sigma_A, N_A,
-            k=self.cfg.k, s_0=self.cfg.s_0,
-            u_repay=self.cfg.u_repay, u_default=self.cfg.u_default,
-            taus=self._taus,
-        )
-        sf_B, profit_B = _group_curves(
-            mu_B, sigma_B, N_B,
-            k=self.cfg.k, s_0=self.cfg.s_0,
-            u_repay=self.cfg.u_repay, u_default=self.cfg.u_default,
-            taus=self._taus,
-        )
+        best_profit = -np.inf
+        best_thresholds = np.zeros(self.G, dtype=np.float64)
 
-        # For each tau_A index i, find tau_B index j minimising |sf_A[i] - sf_B[j]|.
-        diff_matrix = np.abs(sf_A[:, None] - sf_B[None, :])  # (n_taus, n_taus)
-        j_best = np.argmin(diff_matrix, axis=1)
-        min_diffs = diff_matrix[np.arange(len(self._taus)), j_best]
+        for r_star in self._target_rates:
+            thresholds = np.array(
+                [
+                    _threshold_for_approval_rate(mu, sigma, r_star)
+                    for mu, sigma, _ in stats
+                ],
+                dtype=np.float64,
+            )
+            total_profit = 0.0
+            for (mu, sigma, N), tau in zip(stats, thresholds):
+                _, expected_profit = _group_curves(
+                    mu,
+                    sigma,
+                    N,
+                    k=self.cfg.k,
+                    s_0=self.cfg.s_0,
+                    u_repay=self.cfg.u_repay,
+                    u_default=self.cfg.u_default,
+                    taus=np.array([tau]),
+                )
+                total_profit += float(expected_profit[0])
+            if total_profit > best_profit:
+                best_profit = total_profit
+                best_thresholds = thresholds
 
-        joint_profit = profit_A + profit_B[j_best]
-
-        feasible = min_diffs <= self.tolerance
-        if np.any(feasible):
-            candidate_profit = np.where(feasible, joint_profit, -np.inf)
-            i_star = int(np.argmax(candidate_profit))
-        else:
-            # Closest-feasible fallback: prefer smaller diff, break ties by profit.
-            min_d = float(min_diffs.min())
-            mask = min_diffs <= min_d + 1e-12
-            candidate_profit = np.where(mask, joint_profit, -np.inf)
-            i_star = int(np.argmax(candidate_profit))
-
-        return np.array(
-            [self._taus[i_star], self._taus[j_best[i_star]]], dtype=np.float32
-        )
+        return best_thresholds.astype(np.float32)
 
 
 # ------------------------------------------------------------------ rollout
 
 
-_LOG_KEYS: tuple[str, ...] = (
-    "mu_A",
-    "mu_B",
-    "sigma_A",
-    "sigma_B",
-    "N_A",
-    "N_B",
-    "approval_rate_A",
-    "approval_rate_B",
-    "repay_rate_A",
-    "repay_rate_B",
-    "tau_A",
-    "tau_B",
-    "profit",
-    "reward",
-    "gap",
-)
+def _log_keys(G: int) -> tuple[str, ...]:
+    keys: list[str] = []
+    for name in GROUP_ORDER[:G]:
+        keys.extend(
+            [
+                f"mu_{name}",
+                f"sigma_{name}",
+                f"N_{name}",
+                f"approval_rate_{name}",
+                f"repay_rate_{name}",
+                f"tau_{name}",
+            ]
+        )
+    keys.extend(
+        [
+            "profit",
+            "reward",
+            "wvar_mean",
+            "pairwise_gap",
+            "profit_term",
+            "equity_penalty",
+        ]
+    )
+    return tuple(keys)
 
 
 def simulate(
@@ -203,48 +197,39 @@ def simulate(
     n_seeds: int,
     n_rounds: int,
 ) -> dict[str, np.ndarray]:
-    """Run ``policy`` through ``env`` for ``n_seeds`` episodes of ``n_rounds`` steps.
-
-    Returns a dict of arrays. Per-round metrics are shaped ``(n_seeds, n_rounds)``;
-    per-run summary scalars are shaped ``(n_seeds,)``.
-
-    Per-round keys:
-        ``mu_A, mu_B, sigma_A, sigma_B, N_A, N_B,
-        approval_rate_A, approval_rate_B, repay_rate_A, repay_rate_B,
-        tau_A, tau_B, profit, reward, gap``.
-
-    Per-run summary keys:
-        ``cumulative_gap`` -- sum of per-round ``|mu_A - mu_B|`` over the episode.
-    """
+    """Run ``policy`` through ``env`` for ``n_seeds`` episodes of ``n_rounds`` steps."""
     if n_rounds > env.cfg.horizon:
         raise ValueError(
             f"n_rounds={n_rounds} exceeds env horizon {env.cfg.horizon}."
         )
 
-    logs: dict[str, list[list[float]]] = {key: [] for key in _LOG_KEYS}
+    log_keys = _log_keys(env.G)
+    logs: dict[str, list[list[float]]] = {key: [] for key in log_keys}
 
     for seed in range(n_seeds):
         obs, _ = env.reset(seed=seed)
-        seed_logs: dict[str, list[float]] = {key: [] for key in _LOG_KEYS}
+        seed_logs: dict[str, list[float]] = {key: [] for key in log_keys}
         for _ in range(n_rounds):
             action = np.asarray(policy.act(obs), dtype=np.float32)
             obs, reward, terminated, truncated, info = env.step(action)
             per_group = info["per_group"]
-            seed_logs["mu_A"].append(info["mu_A"])
-            seed_logs["mu_B"].append(info["mu_B"])
-            seed_logs["sigma_A"].append(info["sigma_A"])
-            seed_logs["sigma_B"].append(info["sigma_B"])
-            seed_logs["N_A"].append(info["N_A"])
-            seed_logs["N_B"].append(info["N_B"])
-            seed_logs["approval_rate_A"].append(per_group["A"]["approval_rate"])
-            seed_logs["approval_rate_B"].append(per_group["B"]["approval_rate"])
-            seed_logs["repay_rate_A"].append(per_group["A"]["repay_rate"])
-            seed_logs["repay_rate_B"].append(per_group["B"]["repay_rate"])
-            seed_logs["tau_A"].append(per_group["A"]["threshold"])
-            seed_logs["tau_B"].append(per_group["B"]["threshold"])
+            for name in GROUP_ORDER[: env.G]:
+                seed_logs[f"mu_{name}"].append(info[f"mu_{name}"])
+                seed_logs[f"sigma_{name}"].append(info[f"sigma_{name}"])
+                seed_logs[f"N_{name}"].append(info[f"N_{name}"])
+                seed_logs[f"approval_rate_{name}"].append(
+                    per_group[name]["approval_rate"]
+                )
+                seed_logs[f"repay_rate_{name}"].append(
+                    per_group[name]["repay_rate"]
+                )
+                seed_logs[f"tau_{name}"].append(per_group[name]["threshold"])
             seed_logs["profit"].append(info["profit"])
             seed_logs["reward"].append(reward)
-            seed_logs["gap"].append(info["gap"])
+            seed_logs["wvar_mean"].append(info["wvar_mean"])
+            seed_logs["pairwise_gap"].append(info["pairwise_gap"])
+            seed_logs["profit_term"].append(info["profit_term"])
+            seed_logs["equity_penalty"].append(info["equity_penalty"])
             if terminated or truncated:
                 break
         for k, v in seed_logs.items():
@@ -253,5 +238,5 @@ def simulate(
     out: dict[str, np.ndarray] = {
         k: np.asarray(v, dtype=np.float64) for k, v in logs.items()
     }
-    out["cumulative_gap"] = out["gap"].sum(axis=1)
+    out["cumulative_wvar_mean"] = out["wvar_mean"].sum(axis=1)
     return out

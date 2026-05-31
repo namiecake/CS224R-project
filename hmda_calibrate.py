@@ -1,32 +1,8 @@
 """Calibrate LendingEnv initial parameters from HMDA data.
 
 Downloads a filtered subset of HMDA loan-application records from the CFPB
-Data Browser API (https://ffiec.cfpb.gov/documentation/api/data-browser/)
-and fits per-group truncated-Normal distributions over a composite
-creditworthiness proxy built from income, debt-to-income ratio, and LTV.
-
-The output JSON matches LendingConfig field names and can be passed directly
-to LendingEnv:
-
-    import json
-    from lending_env import LendingEnv
-
-    cfg = json.load(open("hmda_config.json"))
-    env = LendingEnv(cfg)
-
-API notes
----------
-- The CFPB Data Browser API requires a ``states`` (or ``leis``) filter for
-  the /view/csv endpoint; the /view/nationwide/csv endpoint accepts just
-  ``years``. Both support additional HMDA filters (races, loan_purposes,
-  actions_taken).
-- The API requires at least one of: states, msamds, counties, leis.
-  We default to a set of large, demographically diverse states to keep the
-  download small while remaining nationally representative.
-- Rows are streamed and parsed one at a time so that even large responses
-  never load fully into memory.
-- Year 2022 is the default (confirmed available in the API); try 2023 if
-  your instance has it.
+Data Browser API and fits per-group truncated-Normal distributions over a
+composite creditworthiness proxy, bucketed into six Race × Income groups.
 
 Usage
 -----
@@ -46,30 +22,25 @@ from typing import Iterator
 import numpy as np
 import requests
 
+from constants import (
+    GROUP_ORDER,
+    HMDA_ETHNICITY_HISPANIC,
+    HMDA_RACE_BLACK,
+    HMDA_RACE_WHITE,
+)
+from lending_env import weighted_variance
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 API_BASE = "https://ffiec.cfpb.gov/v2/data-browser-api/view"
 
-# Group A = White (historically advantaged in mortgage lending)
-# Group B = Black or African American (historically disadvantaged)
-RACE_A = "White"
-RACE_B = "Black or African American"
-
-# HMDA action_taken codes we include:
-#   1 = Loan originated (approved & closed)
-#   2 = Approved but not accepted
-#   3 = Application denied
-# We include all three so both approved and denied applicants shape the
-# distribution, which better reflects the pool that applies.
 DEFAULT_ACTIONS = "1,2,3"
-
-# Loan purpose 1 = Home purchase (the focus of the study)
 DEFAULT_LOAN_PURPOSE = "1"
-
-# Default states: large, diverse, geographically spread.
 DEFAULT_STATES = ["CA", "TX", "FL", "NY", "IL"]
+
+MIN_GROUP_N = 50
 
 
 # ---------------------------------------------------------------------------
@@ -92,8 +63,6 @@ def _stream_rows(url: str, params: dict, n_rows: int, timeout: int) -> Iterator[
             )
             raise SystemExit(1) from exc
 
-        # iter_lines yields decoded strings without newlines; DictReader accepts
-        # any string iterable, so this streams without buffering the full body.
         lines = r.iter_lines(decode_unicode=True)
         reader = csv.DictReader(lines)
         count = 0
@@ -114,14 +83,10 @@ def fetch_rows(
     actions: str,
     timeout: int,
 ) -> list[dict]:
-    """Download up to *n_rows* filtered HMDA rows from the CFPB API.
-
-    The API only allows 2 filter criteria (beyond years/states), so we filter
-    server-side on races only and apply loan_purpose/actions_taken client-side.
-    """
+    """Download up to *n_rows* filtered HMDA rows from the CFPB API."""
     params: dict[str, str] = {
         "years": str(year),
-        "races": f"{RACE_A},{RACE_B}",
+        "races": f"{HMDA_RACE_WHITE},{HMDA_RACE_BLACK}",
     }
 
     if nationwide:
@@ -136,27 +101,39 @@ def fetch_rows(
     print(f"        params: {params}")
     print(f"        streaming up to {n_rows:,} rows …")
     print(f"        client-side filters: loan_purpose={loan_purpose!r}, actions_taken={actions!r}")
+    print(
+        "        client-side ethnicity filter: drop Hispanic White applicants"
+    )
 
     allowed_purposes = set(loan_purpose.split(","))
     allowed_actions = set(actions.split(","))
 
     raw_rows = _stream_rows(url, params, n_rows * 5, timeout)
     rows: list[dict] = []
+    n_ethnicity_dropped = 0
     for row in raw_rows:
         if row.get("loan_purpose", "").strip() not in allowed_purposes:
             continue
         if row.get("action_taken", "").strip() not in allowed_actions:
             continue
+        race = row.get("derived_race", "").strip()
+        ethnicity = row.get("derived_ethnicity", "").strip()
+        if race == HMDA_RACE_WHITE and ethnicity == HMDA_ETHNICITY_HISPANIC:
+            n_ethnicity_dropped += 1
+            continue
         rows.append(row)
         if len(rows) >= n_rows:
             break
 
-    print(f"[fetch] received {len(rows):,} rows after client-side filtering")
+    print(
+        f"[fetch] received {len(rows):,} rows after client-side filtering "
+        f"({n_ethnicity_dropped:,} Hispanic White rows dropped)"
+    )
     return rows
 
 
 # ---------------------------------------------------------------------------
-# Credit-score proxy
+# Credit-score proxy and group assignment
 # ---------------------------------------------------------------------------
 
 
@@ -172,12 +149,23 @@ def _parse_income(val: str) -> float | None:
         return None
 
 
+def _parse_ami(val: str) -> float | None:
+    """Return area median family income in dollars, or None if unavailable."""
+    v = val.strip()
+    if not v or v in ("NA", "Exempt", ""):
+        return None
+    try:
+        ami = float(v)
+        return ami if ami > 0 else None
+    except ValueError:
+        return None
+
+
 def _parse_dti(val: str) -> float | None:
     """Map HMDA DTI range string to a [0,1] score (1 = low DTI = good)."""
     v = val.strip()
     if not v or v in ("NA", "Exempt", ""):
         return None
-    # Specific range tokens
     special = {
         "<20%": 0.90,
         "20%-<30%": 0.75,
@@ -187,10 +175,8 @@ def _parse_dti(val: str) -> float | None:
     }
     if v in special:
         return special[v]
-    # Integer percentages reported as "36%", "43%", …
     try:
         pct = float(v.rstrip("%")) / 100.0
-        # Linear decay: DTI 0% → 1.0, DTI 65%+ → 0.0
         return float(np.clip(1.0 - pct / 0.65, 0.0, 1.0))
     except ValueError:
         return None
@@ -203,40 +189,63 @@ def _parse_ltv(val: str) -> float | None:
         return None
     try:
         ltv = float(v)
-        # LTV 0% → 1.0, LTV 100%+ → 0.0
         return float(np.clip(1.0 - ltv / 100.0, 0.0, 1.0))
     except ValueError:
         return None
 
 
 def compute_credit_score(row: dict) -> float | None:
-    """Return a [0,1] creditworthiness proxy for one HMDA row, or None.
-
-    Components (all in [0,1], higher = more creditworthy):
-        income_score  — log-normalised applicant income
-        dti_score     — inverted DTI (lower ratio → higher score)
-        ltv_score     — inverted LTV (lower ratio → higher score)
-
-    Weights: 50% income, 30% DTI, 20% LTV (LTV omitted when unavailable).
-    """
+    """Return a [0,1] creditworthiness proxy for one HMDA row, or None."""
     income = _parse_income(row.get("income", ""))
     dti = _parse_dti(row.get("debt_to_income_ratio", ""))
-
-    # Both income and DTI required; LTV is optional.
     if income is None or dti is None:
         return None
 
-    # Log-normalise income: $10k → ~0.28, $100k → ~0.57, $500k → 1.0
     income_score = float(np.clip(np.log1p(income) / np.log1p(500.0), 0.0, 1.0))
-
     ltv = _parse_ltv(row.get("combined_loan_to_value_ratio", ""))
 
     if ltv is not None:
         score = 0.50 * income_score + 0.30 * dti + 0.20 * ltv
     else:
-        score = 0.625 * income_score + 0.375 * dti  # re-weight to sum to 1
+        score = 0.625 * income_score + 0.375 * dti
 
     return float(np.clip(score, 0.0, 1.0))
+
+
+def compute_income_tier(row: dict) -> str | None:
+    """Return ``Low``, ``Middle``, or ``Upper`` from income-to-AMI ratio."""
+    income = _parse_income(row.get("income", ""))
+    ami = _parse_ami(row.get("ffiec_msa_md_median_family_income", ""))
+    if income is None or ami is None:
+        return None
+    ratio = (income * 1000.0) / ami
+    if ratio < 0.80:
+        return "Low"
+    if ratio < 1.20:
+        return "Middle"
+    return "Upper"
+
+
+def assign_group(row: dict) -> str | None:
+    """Return a canonical group name or ``None`` if the row cannot be assigned."""
+    race = row.get("derived_race", "").strip()
+    ethnicity = row.get("derived_ethnicity", "").strip()
+
+    if race == HMDA_RACE_WHITE:
+        if ethnicity == HMDA_ETHNICITY_HISPANIC:
+            return None
+        race_label = "White"
+    elif race == HMDA_RACE_BLACK:
+        race_label = "Black"
+    else:
+        return None
+
+    tier = compute_income_tier(row)
+    if tier is None:
+        return None
+
+    name = f"{race_label}_{tier}"
+    return name if name in GROUP_ORDER else None
 
 
 # ---------------------------------------------------------------------------
@@ -245,12 +254,7 @@ def compute_credit_score(row: dict) -> float | None:
 
 
 def fit_truncnorm(scores: np.ndarray) -> tuple[float, float]:
-    """Return (mu, sigma) of the best-fit truncated Normal on [0,1].
-
-    Uses method-of-moments: moment-matches the sample mean and std.  For the
-    sample sizes we work with (thousands of applicants) this is essentially
-    identical to MLE and avoids a numerical optimisation step.
-    """
+    """Return (mu, sigma) of the best-fit truncated Normal on [0,1]."""
     if scores.size == 0:
         raise ValueError("Cannot fit: no valid scores for this group.")
     mu = float(scores.mean())
@@ -284,49 +288,80 @@ def calibrate(
         timeout=timeout,
     )
 
-    scores_A: list[float] = []
-    scores_B: list[float] = []
-    n_skipped = 0
+    scores_by_group: dict[str, list[float]] = {name: [] for name in GROUP_ORDER}
+    n_skipped_score = 0
+    n_skipped_group = 0
 
     for row in rows:
-        race = row.get("derived_race", "").strip()
+        group = assign_group(row)
         score = compute_credit_score(row)
         if score is None:
-            n_skipped += 1
+            n_skipped_score += 1
             continue
-        if race == RACE_A:
-            scores_A.append(score)
-        elif race == RACE_B:
-            scores_B.append(score)
+        if group is None:
+            n_skipped_group += 1
+            continue
+        scores_by_group[group].append(score)
 
-    arr_A = np.asarray(scores_A)
-    arr_B = np.asarray(scores_B)
+    print(f"\n[calibrate] skipped rows (missing income/DTI): {n_skipped_score:,}")
+    print(f"[calibrate] skipped rows (unassigned group):  {n_skipped_group:,}")
 
-    print(f"\n[calibrate] skipped rows (missing income/DTI): {n_skipped:,}")
-    print(f"[calibrate] Group A ({RACE_A}):              N={len(arr_A):,}")
-    print(f"[calibrate] Group B ({RACE_B}): N={len(arr_B):,}")
+    print(f"\n{'Group':<16} {'N':>8} {'mean':>8} {'std':>8}")
+    print("-" * 44)
 
-    if arr_A.size == 0 or arr_B.size == 0:
+    group_configs: list[dict] = []
+    mus: list[float] = []
+    Ns: list[float] = []
+
+    for name in GROUP_ORDER:
+        race, tier = name.split("_", 1)
+        arr = np.asarray(scores_by_group[name])
+        n = int(arr.size)
+
+        if n == 0:
+            print(f"{name:<16} {n:>8} {'—':>8} {'—':>8}")
+            mu, sigma = 0.0, 0.01
+        else:
+            mu, sigma = fit_truncnorm(arr)
+            print(f"{name:<16} {n:>8} {mu:>8.4f} {sigma:>8.4f}")
+            mus.append(mu)
+            Ns.append(float(n))
+
+        group_configs.append(
+            {
+                "name": name,
+                "race": race,
+                "income_tier": tier,
+                "mu_init": round(mu, 4),
+                "sigma_init": round(sigma, 4),
+                "N_init": n,
+            }
+        )
+
+    if mus:
+        weights = np.asarray(Ns, dtype=np.float64)
+        means = np.asarray(mus, dtype=np.float64)
+        overall_mean = float(np.sum(weights * means) / weights.sum())
+        wvar = weighted_variance(means, weights)
+        print(f"\n[calibrate] Population-weighted overall mean: {overall_mean:.4f}")
+        print(f"[calibrate] Weighted variance of group means:   {wvar:.6f}")
+
+    small_groups = [g["name"] for g in group_configs if g["N_init"] < MIN_GROUP_N]
+    if small_groups:
+        print(
+            f"\n*** WARNING: {len(small_groups)} group(s) have N < {MIN_GROUP_N}: "
+            f"{', '.join(small_groups)}. "
+            "Distribution estimates may be unreliable. "
+            "Try a larger --n-rows or different state filter."
+        )
+
+    if all(g["N_init"] == 0 for g in group_configs):
         raise SystemExit(
-            "[error] One or both groups have zero valid rows after filtering.\n"
+            "[error] All groups have zero valid rows after filtering.\n"
             "Try a different year, broader state list, or larger --n-rows."
         )
 
-    mu_A, sigma_A = fit_truncnorm(arr_A)
-    mu_B, sigma_B = fit_truncnorm(arr_B)
-
-    print(f"\n[calibrate] Group A: mu={mu_A:.4f}  sigma={sigma_A:.4f}")
-    print(f"[calibrate] Group B: mu={mu_B:.4f}  sigma={sigma_B:.4f}")
-    print(f"[calibrate] Raw gap (mu_A - mu_B): {mu_A - mu_B:.4f}")
-
-    return {
-        "mu_A_init": round(mu_A, 4),
-        "sigma_A_init": round(sigma_A, 4),
-        "N_A_init": int(len(arr_A)),
-        "mu_B_init": round(mu_B, 4),
-        "sigma_B_init": round(sigma_B, 4),
-        "N_B_init": int(len(arr_B)),
-    }
+    return {"groups": group_configs}
 
 
 # ---------------------------------------------------------------------------
@@ -339,55 +374,20 @@ def main() -> None:
         description="Calibrate LendingEnv initial parameters from HMDA data.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument(
-        "--year",
-        type=int,
-        default=2022,
-        help="HMDA data year (2018–2023; 2022 is the confirmed-available default).",
-    )
+    parser.add_argument("--year", type=int, default=2022)
     parser.add_argument(
         "--states",
         nargs="+",
         default=DEFAULT_STATES,
         metavar="ST",
-        help="Two-letter state codes to include (ignored with --nationwide).",
+        help="Two-letter state codes (ignored with --nationwide).",
     )
-    parser.add_argument(
-        "--nationwide",
-        action="store_true",
-        help=(
-            "Use the /nationwide/csv endpoint instead of state-level filtering. "
-            "Much larger download; combine with a small --n-rows."
-        ),
-    )
-    parser.add_argument(
-        "--n-rows",
-        type=int,
-        default=50_000,
-        help="Maximum number of CSV rows to stream before stopping.",
-    )
-    parser.add_argument(
-        "--loan-purpose",
-        default=DEFAULT_LOAN_PURPOSE,
-        help="HMDA loan_purpose code(s): 1=home purchase, 2=home improvement, "
-        "31/32=refinance.",
-    )
-    parser.add_argument(
-        "--actions",
-        default=DEFAULT_ACTIONS,
-        help="HMDA action_taken code(s) to include.",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        default=120,
-        help="HTTP request timeout in seconds.",
-    )
-    parser.add_argument(
-        "--out",
-        default="hmda_config.json",
-        help="Output path for the calibrated config JSON.",
-    )
+    parser.add_argument("--nationwide", action="store_true")
+    parser.add_argument("--n-rows", type=int, default=50_000)
+    parser.add_argument("--loan-purpose", default=DEFAULT_LOAN_PURPOSE)
+    parser.add_argument("--actions", default=DEFAULT_ACTIONS)
+    parser.add_argument("--timeout", type=int, default=120)
+    parser.add_argument("--out", default="hmda_config.json")
     args = parser.parse_args()
 
     cfg = calibrate(

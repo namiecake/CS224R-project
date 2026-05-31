@@ -1,8 +1,52 @@
 {
-  "mu_A_init": 0.6622,
-  "sigma_A_init": 0.1294,
-  "N_A_init": 42391,
-  "mu_B_init": 0.5966,
-  "sigma_B_init": 0.1097,
-  "N_B_init": 6001
+  "groups": [
+    {
+      "name": "White_Low",
+      "race": "White",
+      "income_tier": "Low",
+      "mu_init": 0.5416,
+      "sigma_init": 0.0826,
+      "N_init": 7643
+    },
+    {
+      "name": "White_Middle",
+      "race": "White",
+      "income_tier": "Middle",
+      "mu_init": 0.6103,
+      "sigma_init": 0.0766,
+      "N_init": 8630
+    },
+    {
+      "name": "White_Upper",
+      "race": "White",
+      "income_tier": "Upper",
+      "mu_init": 0.7403,
+      "sigma_init": 0.109,
+      "N_init": 24338
+    },
+    {
+      "name": "Black_Low",
+      "race": "Black",
+      "income_tier": "Low",
+      "mu_init": 0.5251,
+      "sigma_init": 0.0831,
+      "N_init": 2421
+    },
+    {
+      "name": "Black_Middle",
+      "race": "Black",
+      "income_tier": "Middle",
+      "mu_init": 0.581,
+      "sigma_init": 0.0724,
+      "N_init": 2057
+    },
+    {
+      "name": "Black_Upper",
+      "race": "Black",
+      "income_tier": "Upper",
+      "mu_init": 0.6752,
+      "sigma_init": 0.0992,
+      "N_init": 2618
+    }
+  ]
 }

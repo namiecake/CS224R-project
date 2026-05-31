@@ -10,9 +10,9 @@ Sweeping ``lambda`` therefore leaves their per-round actions unchanged. What
 
 This script is useful for two things:
 
-1. Picking a ``lambda`` for PPO training. Because ``|mu_A - mu_B| in [0, 1]``
-   while profit scales with ``N``, the gap penalty needs to be sized
-   appropriately. Inspecting the per-lambda reward distributions for the
+1. Picking a ``lambda`` for PPO training. Because weighted variance of group
+   means is in ``[0, 1]`` while profit scales with ``N``, the equity penalty
+   needs to be sized appropriately. Inspecting the per-lambda reward distributions for the
    baselines tells you the order of magnitude at which the penalty actually
    shifts the reward signal.
 2. Building a reference table for PPO comparisons later: baseline profit /
@@ -22,7 +22,7 @@ Usage
 -----
 
     python sweep_lambda.py
-    python sweep_lambda.py --lambdas 0.1 1 10 100 1000 --reward-modes profit_dp profit_gap
+    python sweep_lambda.py --lambdas 0.1 1 10 100 1000 --reward-modes profit_wvar_approval profit_wvar_mean
     python sweep_lambda.py --out sweep_results.csv
 """
 
@@ -42,7 +42,10 @@ from baselines import (
 from lending_env import LendingEnv
 
 DEFAULT_LAMBDAS: tuple[float, ...] = (0.1, 1.0, 10.0, 100.0, 1000.0)
-DEFAULT_REWARD_MODES: tuple[str, ...] = ("profit_dp", "profit_gap")
+DEFAULT_REWARD_MODES: tuple[str, ...] = (
+    "profit_wvar_approval",
+    "profit_wvar_mean",
+)
 
 
 @dataclass
@@ -52,15 +55,15 @@ class SweepRow:
     policy: str
     mean_cum_profit: float
     std_cum_profit: float
-    mean_cum_gap: float
-    std_cum_gap: float
+    mean_cum_wvar: float
+    std_cum_wvar: float
     mean_cum_reward: float
     std_cum_reward: float
 
 
 def _summarise(name: str, lam: float, mode: str, logs: dict) -> SweepRow:
     cum_profit = logs["profit"].sum(axis=1)
-    cum_gap = logs["cumulative_gap"]
+    cum_wvar = logs["cumulative_wvar_mean"]
     cum_reward = logs["reward"].sum(axis=1)
     return SweepRow(
         reward_mode=mode,
@@ -68,8 +71,8 @@ def _summarise(name: str, lam: float, mode: str, logs: dict) -> SweepRow:
         policy=name,
         mean_cum_profit=float(cum_profit.mean()),
         std_cum_profit=float(cum_profit.std()),
-        mean_cum_gap=float(cum_gap.mean()),
-        std_cum_gap=float(cum_gap.std()),
+        mean_cum_wvar=float(cum_wvar.mean()),
+        std_cum_wvar=float(cum_wvar.std()),
         mean_cum_reward=float(cum_reward.mean()),
         std_cum_reward=float(cum_reward.std()),
     )
@@ -89,7 +92,7 @@ def main() -> None:
         type=str,
         nargs="+",
         default=list(DEFAULT_REWARD_MODES),
-        choices=["profit", "profit_dp", "profit_gap"],
+        choices=["profit", "profit_wvar_approval", "profit_wvar_mean"],
         help="Reward modes to evaluate (sweeping lambda is a no-op under 'profit').",
     )
     parser.add_argument("--n-seeds", type=int, default=5)
@@ -122,7 +125,7 @@ def main() -> None:
                 print(
                     f"mode={mode:<11} lam={lam:>8g}  policy={name:<18} "
                     f"cum_profit={row.mean_cum_profit:>8.1f}+/-{row.std_cum_profit:>5.1f}  "
-                    f"cum_gap={row.mean_cum_gap:>6.3f}+/-{row.std_cum_gap:>5.3f}  "
+                    f"cum_wvar={row.mean_cum_wvar:>6.4f}+/-{row.std_cum_wvar:>5.4f}  "
                     f"cum_reward={row.mean_cum_reward:>9.1f}+/-{row.std_cum_reward:>6.1f}"
                 )
 
