@@ -1,0 +1,24 @@
+# py
+__pycache__/
+*.py[cod]
+*.pyo
+
+# virtual env
+.venv/
+venv/
+env/
+
+# trained models / sweep outputs
+ppo_results/
+*.zip
+*.pkl
+
+# generated data / figures
+*.png
+*.csv
+
+# jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store

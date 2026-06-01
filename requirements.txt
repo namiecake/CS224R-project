@@ -3,3 +3,4 @@ scipy>=1.10
 matplotlib>=3.7
 gymnasium>=0.29
 requests>=2.28
+stable-baselines3>=2.3
