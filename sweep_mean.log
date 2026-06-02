@@ -1,0 +1,127 @@
+[train] ppo_profit_wvar_mean_lam100.0_seed0  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed0/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed0/vecnorm.pkl
+  [1/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam100.0_seed1  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed1/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed1/vecnorm.pkl
+  [2/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam100.0_seed2  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed2/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed2/vecnorm.pkl
+  [3/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam100.0_seed3  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed3/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed3/vecnorm.pkl
+  [4/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam100.0_seed4  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed4/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100.0_seed4/vecnorm.pkl
+  [5/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000.0_seed0  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed0/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed0/vecnorm.pkl
+  [6/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000.0_seed1  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed1/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed1/vecnorm.pkl
+  [7/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000.0_seed2  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed2/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed2/vecnorm.pkl
+  [8/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000.0_seed3  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed3/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed3/vecnorm.pkl
+  [9/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000.0_seed4  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed4/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000.0_seed4/vecnorm.pkl
+  [10/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam10000.0_seed0  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed0/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed0/vecnorm.pkl
+  [11/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam10000.0_seed1  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed1/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed1/vecnorm.pkl
+  [12/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam10000.0_seed2  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed2/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed2/vecnorm.pkl
+  [13/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam10000.0_seed3  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed3/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed3/vecnorm.pkl
+  [14/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam10000.0_seed4  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed4/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam10000.0_seed4/vecnorm.pkl
+  [15/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam100000.0_seed0  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed0/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed0/vecnorm.pkl
+  [16/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam100000.0_seed1  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed1/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed1/vecnorm.pkl
+  [17/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam100000.0_seed2  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed2/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed2/vecnorm.pkl
+  [18/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam100000.0_seed3  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed3/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed3/vecnorm.pkl
+  [19/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam100000.0_seed4  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed4/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam100000.0_seed4/vecnorm.pkl
+  [20/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000000.0_seed0  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed0/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed0/vecnorm.pkl
+  [21/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000000.0_seed1  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed1/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed1/vecnorm.pkl
+  [22/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000000.0_seed2  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed2/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed2/vecnorm.pkl
+  [23/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000000.0_seed3  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed3/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed3/vecnorm.pkl
+  [24/25] training runs complete
+
+[train] ppo_profit_wvar_mean_lam1000000.0_seed4  timesteps=200,000
+[done]  saved ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed4/model.zip + ppo_results_nomi/ppo_profit_wvar_mean_lam1000000.0_seed4/vecnorm.pkl
+  [25/25] training runs complete
+
+  PPO  mode=profit_wvar_mean  lam=100.0
+    cum_profit=1280788.6±12868.2  final_wvar=0.0154±0.0004
+  baselines mode=profit_wvar_mean  lam=100.0
+    ProfitMax            cum_profit=1173066.0±1956.3  final_wvar=0.0154±0.0002
+    DemographicParity    cum_profit=1067788.4±3661.2  final_wvar=0.0106±0.0001
+  PPO  mode=profit_wvar_mean  lam=1000.0
+    cum_profit=1287278.0±23527.1  final_wvar=0.0150±0.0012
+  baselines mode=profit_wvar_mean  lam=1000.0
+    ProfitMax            cum_profit=1173066.0±1956.3  final_wvar=0.0154±0.0002
+    DemographicParity    cum_profit=1067788.4±3661.2  final_wvar=0.0106±0.0001
+  PPO  mode=profit_wvar_mean  lam=10000.0
+    cum_profit=1291117.6±10995.6  final_wvar=0.0151±0.0007
+  baselines mode=profit_wvar_mean  lam=10000.0
+    ProfitMax            cum_profit=1173066.0±1956.3  final_wvar=0.0154±0.0002
+    DemographicParity    cum_profit=1067788.4±3661.2  final_wvar=0.0106±0.0001
+  PPO  mode=profit_wvar_mean  lam=100000.0
+    cum_profit=1257739.2±39298.2  final_wvar=0.0159±0.0014
+  baselines mode=profit_wvar_mean  lam=100000.0
+    ProfitMax            cum_profit=1173066.0±1956.3  final_wvar=0.0154±0.0002
+    DemographicParity    cum_profit=1067788.4±3661.2  final_wvar=0.0106±0.0001
+  PPO  mode=profit_wvar_mean  lam=1000000.0
+    cum_profit=1149381.4±8191.1  final_wvar=0.0161±0.0004
+  baselines mode=profit_wvar_mean  lam=1000000.0
+    ProfitMax            cum_profit=1173066.0±1956.3  final_wvar=0.0154±0.0002
+    DemographicParity    cum_profit=1067788.4±3661.2  final_wvar=0.0106±0.0001
+
+Wrote 15 rows: ppo_sweep_results_mean.csv
