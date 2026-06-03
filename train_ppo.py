@@ -65,7 +65,7 @@ def train(
     env_config = build_env_config(reward_mode, lam, hmda_config_path)
 
     vec_env = make_vec_env(lambda: LendingEnv(env_config), n_envs=1, seed=seed)
-    vec_env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+    vec_env = VecNormalize(vec_env, norm_obs=True, norm_reward=False, clip_obs=10.0)
 
     model = PPO(
         "MlpPolicy",
