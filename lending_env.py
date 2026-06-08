@@ -143,7 +143,8 @@ class LendingEnv(gym.Env):
 
     Observation: ``np.array`` of shape ``(3 * G,)`` —
     ``[μ_0, σ_0, N_0, …, μ_{G-1}, σ_{G-1}, N_{G-1}]`` in ``GROUP_ORDER``.
-    Action: ``np.array`` of shape ``(G,)`` — per-group thresholds in ``[0, 1]``.
+    Action: ``np.array`` of shape ``(G,)`` — values in ``[-1, 1]``, mapped to
+    per-group approval thresholds in ``[0, 1]`` via ``(a + 1) / 2``.
     """
 
     metadata = {"render_modes": []}
@@ -170,7 +171,7 @@ class LendingEnv(gym.Env):
         obs_high = np.tile([1.0, 1.0, N_max], self.G).astype(np.float32)
         self.observation_space = spaces.Box(low=obs_low, high=obs_high, dtype=np.float32)
         self.action_space = spaces.Box(
-            low=np.zeros(self.G, dtype=np.float32),
+            low=-np.ones(self.G, dtype=np.float32),
             high=np.ones(self.G, dtype=np.float32),
             dtype=np.float32,
         )
@@ -217,12 +218,14 @@ class LendingEnv(gym.Env):
                 f"Expected action of size {self.G}, got {action.shape}."
             )
 
+        thresholds = np.clip((action + 1.0) / 2.0, 0.0, 1.0)
+
         per_group: dict[str, dict[str, float]] = {}
         total_profit = 0.0
 
         for g_idx, group in enumerate(self.groups):
             scores = self._populations[g_idx]
-            tau = float(action[g_idx])
+            tau = float(thresholds[g_idx])
 
             approved_mask = scores >= tau
             approved_scores = scores[approved_mask]
