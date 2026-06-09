@@ -65,13 +65,16 @@ def train(
     env_config = build_env_config(reward_mode, lam, hmda_config_path)
 
     vec_env = make_vec_env(lambda: LendingEnv(env_config), n_envs=1, seed=seed)
-    vec_env = VecNormalize(vec_env, norm_obs=True, norm_reward=False, clip_obs=10.0)
+    vec_env = VecNormalize(
+        vec_env, norm_obs=True, norm_reward=True,
+        clip_obs=10.0, clip_reward=10.0, gamma=0.99,
+    )
 
     model = PPO(
         "MlpPolicy",
         vec_env,
         learning_rate=3e-4,
-        n_steps=512,
+        n_steps=2048,
         batch_size=64,
         n_epochs=10,
         gamma=0.99,

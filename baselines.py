@@ -113,7 +113,7 @@ class ProfitMaxThresholdPolicy:
                 taus=self._taus,
             )
             tau_out[i] = self._taus[int(np.argmax(expected_profit))]
-        return tau_out
+        return 2.0 * tau_out - 1.0
 
 
 class DemographicParityPolicy:
@@ -159,7 +159,7 @@ class DemographicParityPolicy:
                 best_profit = total_profit
                 best_thresholds = thresholds
 
-        return best_thresholds.astype(np.float32)
+        return (2.0 * best_thresholds - 1.0).astype(np.float32)
 
 
 # ------------------------------------------------------------------ rollout
