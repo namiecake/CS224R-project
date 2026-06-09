@@ -14,8 +14,8 @@ ppo_results/
 *.pkl
 
 # generated data / figures
-*.png
-*.csv
+# *.png
+# *.csv
 
 # jupyter
 .ipynb_checkpoints/
